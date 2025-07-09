@@ -27,6 +27,8 @@ void DrawingArea::setPenWidth(int newWidth)
     penWidth = newWidth;
 }
 
+
+
 void DrawingArea::clear()
 {
     image.fill(Qt::white);
@@ -129,6 +131,8 @@ DrawGame::DrawGame(QWidget *parent) :
 
     setupConnections();
     onStartGameClicked(); // Начинаем игру сразу
+    connect(ui->widthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            drawingArea, &DrawingArea::setPenWidth);
 }
 
 DrawGame::~DrawGame()
@@ -249,3 +253,4 @@ void DrawGame::switchRoles()
     isDrawer = !isDrawer; // Меняем роль
     ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
 }
+

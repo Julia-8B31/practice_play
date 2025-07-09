@@ -24,6 +24,7 @@ public:
     bool isEraserMode() const { return eraserMode; }
     void setEraserMode(bool mode) { eraserMode = mode; }
 
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
