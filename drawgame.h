@@ -8,6 +8,8 @@
 #include <QPoint>
 #include <QImage>
 #include <QTimer>
+#include <QTcpServer>
+#include <QTcpSocket>
 
 namespace Ui {
 class DrawGame;
@@ -23,6 +25,15 @@ public:
     void clear();
     bool isEraserMode() const { return eraserMode; }
     void setEraserMode(bool mode) { eraserMode = mode; }
+    const QImage& getImage() const { return image; }
+    void setImage(const QImage& newImage);
+    QColor getPenColor() const { return penColor; }
+    int getPenWidth() const { return penWidth; }
+    QPoint getLastPoint() const { return lastPoint; }
+    void setLastPoint(const QPoint &point) { lastPoint = point; }
+    void handleMousePressEvent(QMouseEvent *event);
+    void handleMouseMoveEvent(QMouseEvent *event);
+    void publicDrawLineTo(const QPoint &endPoint);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -51,6 +62,10 @@ public:
     explicit DrawGame(QWidget *parent = nullptr);
     ~DrawGame();
 
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+
 private slots:
     void onStartGameClicked();
     void onSendMessageClicked();
@@ -58,19 +73,27 @@ private slots:
     void onClearClicked();
     void onEraserClicked(bool checked);
     void updateGame();
+    void newConnection();
+    void readData();
+    void disconnected();
 
 private:
     void setupConnections();
     void generateRandomWord();
-    void switchRoles(); // Переключение ролей между игроками
+    void switchRoles();
+    void sendData(const QString &data);
+    void processCommand(const QString &command, const QString &data);
 
     Ui::DrawGame *ui;
     DrawingArea *drawingArea;
     QTimer *gameTimer;
     QString currentWord;
     QStringList wordList;
-    bool isDrawer; // true - игрок рисует, false - отгадывает
-    int secondsLeft; // Оставшееся время
+    bool isDrawer;
+    int secondsLeft;
+    QTcpServer *server;
+    QTcpSocket *clientSocket;
+    bool isServer;
 };
 
 #endif // DRAWGAME_H
