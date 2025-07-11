@@ -35,6 +35,7 @@ public:
     void handleMouseMoveEvent(QMouseEvent *event);
     void publicDrawLineTo(const QPoint &endPoint);
 
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
