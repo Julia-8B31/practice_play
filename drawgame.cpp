@@ -196,6 +196,8 @@ DrawGame::DrawGame(QWidget *parent) :
     onStartGameClicked();
     connect(ui->widthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             drawingArea, &DrawingArea::setPenWidth);
+    connect(ui->messageLineEdit, &QLineEdit::returnPressed, this,
+            &DrawGame::onSendMessageClicked);
 }
 
 DrawGame::~DrawGame()
@@ -205,10 +207,13 @@ DrawGame::~DrawGame()
 
 void DrawGame::assignRandomRole()
 {
-    isDrawer = QRandomGenerator::global()->bounded(2) == 0;
-
-    if (clientSocket) {
-        sendData(QString("ROLE:%1").arg(isDrawer ? "GUESSER" : "DRAWER"));
+    if (isServer) {
+        isDrawer = true;
+        if (clientSocket) {
+            sendData("ROLE:GUESSER");
+        }
+    } else {
+        isDrawer = false;
     }
 
     ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
@@ -255,6 +260,7 @@ void DrawGame::onSendMessageClicked()
         if (clientSocket) {
             sendData("CHAT:" + message);
         }
+
         if (!isDrawer) {
             if (message.compare(currentWord, Qt::CaseInsensitive) == 0) {
                 gameTimer->stop();
@@ -263,9 +269,11 @@ void DrawGame::onSendMessageClicked()
 
                 if (clientSocket) {
                     sendData("WIN:" + currentWord);
+                    isDrawer = true;
+                    sendData("ROLE:GUESSER");
                 }
 
-                assignRandomRole();
+                ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
                 onStartGameClicked();
             }
         }
@@ -329,6 +337,20 @@ void DrawGame::generateRandomWord()
     }
 }
 
+void DrawGame::sendDrawingData(const QPoint& from, const QPoint& to)
+{
+    if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState && isDrawer) {
+        QString data = QString("DRAW:%1,%2;%3,%4;%5,%6,%7,%8,%9")
+        .arg(from.x()).arg(from.y())
+            .arg(to.x()).arg(to.y())
+            .arg(drawingArea->getPenColor().red())
+            .arg(drawingArea->getPenColor().green())
+            .arg(drawingArea->getPenColor().blue())
+            .arg(drawingArea->isEraserMode() ? 1 : 0)
+            .arg(drawingArea->getPenWidth());
+        sendData(data);
+    }
+}
 
 void DrawGame::newConnection()
 {
@@ -348,6 +370,8 @@ void DrawGame::newConnection()
 
 void DrawGame::processDrawingCommand(const QString &data)
 {
+    if (isDrawer) return;
+
     QStringList parts = data.split(';');
     if (parts.size() >= 3) {
         QStringList start = parts[0].split(',');
@@ -355,29 +379,18 @@ void DrawGame::processDrawingCommand(const QString &data)
         QStringList params = parts[2].split(',');
 
         if (start.size() == 2 && end.size() == 2 && params.size() >= 4) {
-            bool ok1, ok2, ok3, ok4;
-            QPoint startPoint(start[0].toInt(&ok1), start[1].toInt(&ok2));
-            QPoint endPoint(end[0].toInt(&ok3), end[1].toInt(&ok4));
-
-            if (!ok1 || !ok2 || !ok3 || !ok4) return;
+            QPoint startPoint(start[0].toInt(), start[1].toInt());
+            QPoint endPoint(end[0].toInt(), end[1].toInt());
 
             QColor color(params[0].toInt(), params[1].toInt(), params[2].toInt());
             bool eraser = params[3].toInt();
             int width = params.size() > 4 ? params[4].toInt() : 3;
-
-            QColor oldColor = drawingArea->getPenColor();
-            bool oldEraser = drawingArea->isEraserMode();
-            int oldWidth = drawingArea->getPenWidth();
 
             drawingArea->setPenColor(color);
             drawingArea->setEraserMode(eraser);
             drawingArea->setPenWidth(width);
             drawingArea->setLastPoint(startPoint);
             drawingArea->publicDrawLineTo(endPoint);
-
-            drawingArea->setPenColor(oldColor);
-            drawingArea->setEraserMode(oldEraser);
-            drawingArea->setPenWidth(oldWidth);
         }
     }
 }
@@ -419,7 +432,8 @@ void DrawGame::readData()
                 ui->chatTextEdit->append("Система: Соперник угадал слово \"" + currentWord + "\"");
                 QMessageBox::information(this, "Игра окончена", "Соперник угадал слово: " + currentWord);
 
-                assignRandomRole();
+                isDrawer = false;
+                ui->startButton->setText("Начать игру (Вы отгадываете)");
                 onStartGameClicked();
             }
         }
@@ -442,39 +456,22 @@ void DrawGame::sendData(const QString &data)
     }
 }
 
-void DrawGame::mousePressEvent(QMouseEvent *event) {
+void DrawGame::mousePressEvent(QMouseEvent *event)
+{
     if (event->button() == Qt::LeftButton && isDrawer) {
         QPoint pos = drawingArea->mapFromParent(event->pos());
         drawingArea->handleMousePressEvent(new QMouseEvent(QEvent::MouseButtonPress, pos,
                                                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
-        if (clientSocket) {
-            QString data = QString("DRAW:%1,%2;%1,%2;%3,%4,%5,%6,%7")
-            .arg(pos.x()).arg(pos.y())
-                .arg(drawingArea->getPenColor().red())
-                .arg(drawingArea->getPenColor().green())
-                .arg(drawingArea->getPenColor().blue())
-                .arg(drawingArea->isEraserMode() ? 1 : 0)
-                .arg(drawingArea->getPenWidth());
-            sendData(data);
-        }
+        sendDrawingData(pos, pos);
     }
 }
 
-void DrawGame::mouseMoveEvent(QMouseEvent *event) {
+void DrawGame::mouseMoveEvent(QMouseEvent *event)
+{
     if ((event->buttons() & Qt::LeftButton) && isDrawer) {
         QPoint pos = drawingArea->mapFromParent(event->pos());
         drawingArea->handleMouseMoveEvent(new QMouseEvent(QEvent::MouseMove, pos,
                                                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
-        if (clientSocket) {
-            QString data = QString("DRAW:%1,%2;%3,%4;%5,%6,%7,%8,%9")
-            .arg(drawingArea->getLastPoint().x()).arg(drawingArea->getLastPoint().y())
-                .arg(pos.x()).arg(pos.y())
-                .arg(drawingArea->getPenColor().red())
-                .arg(drawingArea->getPenColor().green())
-                .arg(drawingArea->getPenColor().blue())
-                .arg(drawingArea->isEraserMode() ? 1 : 0)
-                .arg(drawingArea->getPenWidth());
-            sendData(data);
-        }
+        sendDrawingData(drawingArea->getLastPoint(), pos);
     }
 }

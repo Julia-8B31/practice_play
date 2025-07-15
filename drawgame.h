@@ -84,6 +84,7 @@ private:
     void processDrawingCommand(const QString &data);
     void sendImageData();
     void assignRandomRole();
+    void sendDrawingData(const QPoint& from, const QPoint& to);
 
     Ui::DrawGame *ui;
     DrawingArea *drawingArea;

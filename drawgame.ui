@@ -33,7 +33,7 @@
          <string>Слово: -</string>
         </property>
         <property name="alignment">
-         <set>Qt::AlignCenter</set>
+         <set>Qt::AlignmentFlag::AlignCenter</set>
         </property>
        </widget>
       </item>
@@ -60,6 +60,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="sendButton">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
         <property name="text">
          <string>Отправить</string>
         </property>
@@ -67,6 +70,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="startButton">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
         <property name="text">
          <string>Начать игру</string>
         </property>
@@ -76,6 +82,9 @@
        <layout class="QHBoxLayout" name="toolsLayout">
         <item>
          <widget class="QComboBox" name="colorComboBox">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
           <item>
            <property name="text">
             <string>Черный</string>
@@ -105,6 +114,9 @@
         </item>
         <item>
          <widget class="QSpinBox" name="widthSpinBox">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
           <property name="minimum">
            <number>1</number>
           </property>
@@ -118,6 +130,9 @@
         </item>
         <item>
          <widget class="QPushButton" name="clearButton">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
           <property name="text">
            <string>Очистить</string>
           </property>
@@ -125,6 +140,9 @@
         </item>
         <item>
          <widget class="QPushButton" name="eraserButton">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
           <property name="text">
            <string>Ластик</string>
           </property>
