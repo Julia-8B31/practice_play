@@ -186,7 +186,6 @@ DrawGame::DrawGame(QWidget *parent) :
 
         connect(clientSocket, &QTcpSocket::connected, this, [this]() {
             ui->statusLabel->setText("Подключено к серверу");
-            isDrawer = false;
         });
 
         connect(clientSocket, &QTcpSocket::readyRead, this, &DrawGame::readData);
@@ -204,6 +203,17 @@ DrawGame::~DrawGame()
     delete ui;
 }
 
+void DrawGame::assignRandomRole()
+{
+    isDrawer = QRandomGenerator::global()->bounded(2) == 0;
+
+    if (clientSocket) {
+        sendData(QString("ROLE:%1").arg(isDrawer ? "GUESSER" : "DRAWER"));
+    }
+
+    ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
+}
+
 void DrawGame::setupConnections()
 {
     connect(ui->startButton, &QPushButton::clicked, this, &DrawGame::onStartGameClicked);
@@ -217,6 +227,8 @@ void DrawGame::setupConnections()
 
 void DrawGame::onStartGameClicked()
 {
+    assignRandomRole();
+
     generateRandomWord();
     gameTimer->start();
     secondsLeft = 180;
@@ -227,7 +239,6 @@ void DrawGame::onStartGameClicked()
         ui->wordLabel->setText("Слово: " + currentWord);
         if (clientSocket) {
             sendData("WORD:" + currentWord);
-            sendData("ROLE:DRAWER");
         }
     } else {
         ui->wordLabel->setText("Слово: *****");
@@ -244,7 +255,6 @@ void DrawGame::onSendMessageClicked()
         if (clientSocket) {
             sendData("CHAT:" + message);
         }
-
         if (!isDrawer) {
             if (message.compare(currentWord, Qt::CaseInsensitive) == 0) {
                 gameTimer->stop();
@@ -253,13 +263,10 @@ void DrawGame::onSendMessageClicked()
 
                 if (clientSocket) {
                     sendData("WIN:" + currentWord);
-                    sendData("ROLE:DRAWER");
                 }
 
-                switchRoles();
+                assignRandomRole();
                 onStartGameClicked();
-            } else {
-                ui->chatTextEdit->append("Система: Неверно! Попробуйте ещё.");
             }
         }
     }
@@ -310,7 +317,6 @@ void DrawGame::updateGame()
     if (secondsLeft <= 0) {
         gameTimer->stop();
         QMessageBox::information(this, "Время вышло!", "Слово было: " + currentWord);
-        switchRoles();
         onStartGameClicked();
     }
 }
@@ -323,11 +329,6 @@ void DrawGame::generateRandomWord()
     }
 }
 
-void DrawGame::switchRoles()
-{
-    isDrawer = !isDrawer;
-    ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
-}
 
 void DrawGame::newConnection()
 {
@@ -341,7 +342,7 @@ void DrawGame::newConnection()
     connect(clientSocket, &QTcpSocket::disconnected, this, &DrawGame::disconnected);
 
     ui->statusLabel->setText("Клиент подключен");
-    isDrawer = true;
+    // Роль будет назначена при старте игры
     onStartGameClicked();
 }
 
@@ -417,7 +418,8 @@ void DrawGame::readData()
                 currentWord = dataPart;
                 ui->chatTextEdit->append("Система: Соперник угадал слово \"" + currentWord + "\"");
                 QMessageBox::information(this, "Игра окончена", "Соперник угадал слово: " + currentWord);
-                switchRoles();
+
+                assignRandomRole();
                 onStartGameClicked();
             }
         }
