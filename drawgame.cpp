@@ -252,7 +252,7 @@ void DrawGame::onSendMessageClicked()
                 QMessageBox::information(this, "Поздравляем!", "Вы угадали слово: " + currentWord);
 
                 if (clientSocket) {
-                    sendData("WIN:" + message);
+                    sendData("WIN:" + currentWord);
                     sendData("ROLE:DRAWER");
                 }
 
@@ -403,11 +403,7 @@ void DrawGame::readData()
             }
             else if (command == "WORD") {
                 currentWord = dataPart;
-                if (!isDrawer) {
-                    ui->wordLabel->setText("Слово: *****");
-                } else {
-                    ui->wordLabel->setText("Слово: " + currentWord);
-                }
+                ui->wordLabel->setText(isDrawer ? "Слово: " + currentWord : "Слово: *****");
             }
             else if (command == "ROLE") {
                 isDrawer = (dataPart == "DRAWER");
@@ -446,10 +442,12 @@ void DrawGame::sendData(const QString &data)
 
 void DrawGame::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && isDrawer) {
-        drawingArea->handleMousePressEvent(event);
+        QPoint pos = drawingArea->mapFromParent(event->pos());
+        drawingArea->handleMousePressEvent(new QMouseEvent(QEvent::MouseButtonPress, pos,
+                                                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
         if (clientSocket) {
             QString data = QString("DRAW:%1,%2;%1,%2;%3,%4,%5,%6,%7")
-            .arg(event->pos().x()).arg(event->pos().y())
+            .arg(pos.x()).arg(pos.y())
                 .arg(drawingArea->getPenColor().red())
                 .arg(drawingArea->getPenColor().green())
                 .arg(drawingArea->getPenColor().blue())
@@ -462,11 +460,13 @@ void DrawGame::mousePressEvent(QMouseEvent *event) {
 
 void DrawGame::mouseMoveEvent(QMouseEvent *event) {
     if ((event->buttons() & Qt::LeftButton) && isDrawer) {
-        drawingArea->handleMouseMoveEvent(event);
+        QPoint pos = drawingArea->mapFromParent(event->pos());
+        drawingArea->handleMouseMoveEvent(new QMouseEvent(QEvent::MouseMove, pos,
+                                                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
         if (clientSocket) {
             QString data = QString("DRAW:%1,%2;%3,%4;%5,%6,%7,%8,%9")
             .arg(drawingArea->getLastPoint().x()).arg(drawingArea->getLastPoint().y())
-                .arg(event->pos().x()).arg(event->pos().y())
+                .arg(pos.x()).arg(pos.y())
                 .arg(drawingArea->getPenColor().red())
                 .arg(drawingArea->getPenColor().green())
                 .arg(drawingArea->getPenColor().blue())

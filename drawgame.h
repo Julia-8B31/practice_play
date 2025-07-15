@@ -82,6 +82,7 @@ private:
     void switchRoles();
     void sendData(const QString &data);
     void processDrawingCommand(const QString &data);
+    void sendImageData();
 
     Ui::DrawGame *ui;
     DrawingArea *drawingArea;
