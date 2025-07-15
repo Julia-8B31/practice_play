@@ -234,6 +234,21 @@ void DrawGame::setupConnections()
     connect(gameTimer, &QTimer::timeout, this, &DrawGame::updateGame);
 }
 
+void DrawGame::sendDrawingData(const QPoint& from, const QPoint& to)
+{
+    if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState && isDrawer) {
+        QString data = QString("DRAW:%1,%2;%3,%4;%5,%6,%7,%8,%9")
+        .arg(from.x()).arg(from.y())
+            .arg(to.x()).arg(to.y())
+            .arg(drawingArea->getPenColor().red())
+            .arg(drawingArea->getPenColor().green())
+            .arg(drawingArea->getPenColor().blue())
+            .arg(drawingArea->isEraserMode() ? 1 : 0)
+            .arg(drawingArea->getPenWidth());
+        sendData(data);
+    }
+}
+
 void DrawGame::sendImageData()
 {
     if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState && isDrawer) {
@@ -241,9 +256,11 @@ void DrawGame::sendImageData()
         QBuffer buffer(&byteArray);
         buffer.open(QIODevice::WriteOnly);
         drawingArea->getImage().save(&buffer, "PNG");
+        buffer.close();
         sendData("IMAGE:" + QString::fromLatin1(byteArray.toBase64()));
     }
 }
+
 void DrawGame::onStartGameClicked()
 {
     assignRandomRole();
@@ -352,20 +369,7 @@ void DrawGame::generateRandomWord()
     }
 }
 
-void DrawGame::sendDrawingData(const QPoint& from, const QPoint& to)
-{
-    if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState && isDrawer) {
-        QString data = QString("DRAW:%1,%2;%3,%4;%5,%6,%7,%8,%9")
-        .arg(from.x()).arg(from.y())
-            .arg(to.x()).arg(to.y())
-            .arg(drawingArea->getPenColor().red())
-            .arg(drawingArea->getPenColor().green())
-            .arg(drawingArea->getPenColor().blue())
-            .arg(drawingArea->isEraserMode() ? 1 : 0)
-            .arg(drawingArea->getPenWidth());
-        sendData(data);
-    }
-}
+
 
 void DrawGame::newConnection()
 {
@@ -408,6 +412,8 @@ void DrawGame::processDrawingCommand(const QString &data)
             drawingArea->setPenWidth(width);
             drawingArea->setLastPoint(startPoint);
             drawingArea->publicDrawLineTo(endPoint);
+
+            update();
         }
     }
 }
@@ -487,8 +493,9 @@ void DrawGame::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton && isDrawer) {
         QPoint pos = drawingArea->mapFromParent(event->pos());
-        drawingArea->handleMousePressEvent(new QMouseEvent(QEvent::MouseButtonPress, pos,
-                                                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
+        auto *newEvent = new QMouseEvent(QEvent::MouseButtonPress, pos, event->globalPosition(),
+                                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        drawingArea->handleMousePressEvent(newEvent);
         sendDrawingData(pos, pos);
     }
 }
@@ -497,8 +504,9 @@ void DrawGame::mouseMoveEvent(QMouseEvent *event)
 {
     if ((event->buttons() & Qt::LeftButton) && isDrawer) {
         QPoint pos = drawingArea->mapFromParent(event->pos());
-        drawingArea->handleMouseMoveEvent(new QMouseEvent(QEvent::MouseMove, pos,
-                                                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
+        auto *newEvent = new QMouseEvent(QEvent::MouseMove, pos, event->globalPosition(),
+                                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        drawingArea->handleMouseMoveEvent(newEvent);
         sendDrawingData(drawingArea->getLastPoint(), pos);
     }
 }
