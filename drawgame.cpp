@@ -131,37 +131,14 @@ DrawGame::DrawGame(QWidget *parent) :
     wordList << "Кошка" << "Собака" << "Дом" << "Солнце" << "Дерево"
              << "Машина" << "Река" << "Гора" << "Книга" << "Цветок";
 
-    QLayoutItem* item = ui->horizontalLayout->takeAt(0);
-    if (item) {
-        delete item->widget();
-        delete item;
-    }
-
     drawingArea = new DrawingArea(this);
     drawingArea->setMinimumSize(600, 400);
     ui->horizontalLayout->insertWidget(0, drawingArea);
 
     gameTimer->setInterval(1000);
-
-    QMessageBox::StandardButton reply = QMessageBox::question(this, "Выбор режима",
-                                                              "Запустить сервер?", QMessageBox::Yes|QMessageBox::No);
-    isServer = (reply == QMessageBox::Yes);
-
-    if (isServer) {
-        // Сервер всегда начинает как рисующий
-        isDrawer = true;
-        ui->startButton->setText("Начать игру (Вы рисуете)");
-    } else {
-        // Клиент всегда начинает как угадывающий
-        isDrawer = false;
-        ui->startButton->setText("Начать игру (Вы отгадываете)");
-    }
-
+    ui->startButton->setEnabled(false);
 
     setupConnections();
-    onStartGameClicked();
-    connect(ui->widthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            drawingArea, &DrawingArea::setPenWidth);
 }
 
 DrawGame::~DrawGame()
@@ -171,6 +148,7 @@ DrawGame::~DrawGame()
 
 void DrawGame::setupConnections()
 {
+    connect(ui->connectButton, &QPushButton::clicked, this, &DrawGame::onConnectClicked);
     connect(ui->startButton, &QPushButton::clicked, this, &DrawGame::onStartGameClicked);
     connect(ui->sendButton, &QPushButton::clicked, this, &DrawGame::onSendMessageClicked);
     connect(ui->colorComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -290,11 +268,10 @@ void DrawGame::generateRandomWord()
 
 void DrawGame::switchRoles()
 {
-    isDrawer = !isDrawer;  // Меняем роль текущего игрока
+    isDrawer = !isDrawer;
     ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
 
     if (clientSocket) {
-        // Отправляем другому игроку его новую роль (противоположную нашей)
         sendData(QString("ROLE:%1").arg(isDrawer ? "GUESSER" : "DRAWER"));
     }
 }
@@ -330,7 +307,6 @@ void DrawGame::readData()
             QString dataPart = message.mid(separatorIndex + 1);
 
             if (command == "ROLE") {
-                // Обновляем роль в соответствии с полученным сообщением
                 isDrawer = (dataPart == "DRAWER");
                 ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
 
@@ -342,7 +318,7 @@ void DrawGame::readData()
             }
 
             if (command == "DRAW") {
-                if (!isDrawer) {  // Только если мы угадывающий, принимаем рисунок
+                if (!isDrawer) {
                     QStringList parts = dataPart.split(';');
                     if (parts.size() >= 3) {
                         QStringList start = parts[0].split(',');
@@ -357,19 +333,16 @@ void DrawGame::readData()
                             bool eraser = params[3].toInt();
                             int width = params.size() > 4 ? params[4].toInt() : 3;
 
-                            // Сохраняем текущие настройки кисти
                             QColor oldColor = drawingArea->getPenColor();
                             bool oldEraser = drawingArea->isEraserMode();
                             int oldWidth = drawingArea->getPenWidth();
 
-                            // Устанавливаем параметры из сообщения
                             drawingArea->setPenColor(color);
                             drawingArea->setEraserMode(eraser);
                             drawingArea->setPenWidth(width);
                             drawingArea->setLastPoint(startPoint);
                             drawingArea->publicDrawLineTo(endPoint);
 
-                            // Восстанавливаем старые настройки
                             drawingArea->setPenColor(oldColor);
                             drawingArea->setEraserMode(oldEraser);
                             drawingArea->setPenWidth(oldWidth);
@@ -410,9 +383,15 @@ void DrawGame::readData()
 void DrawGame::disconnected()
 {
     ui->statusLabel->setText("Соединение разорвано");
+    ui->startButton->setEnabled(false);
     if (clientSocket) {
         clientSocket->deleteLater();
         clientSocket = nullptr;
+    }
+    if (server) {
+        server->close();
+        server->deleteLater();
+        server = nullptr;
     }
 }
 
@@ -420,8 +399,8 @@ void DrawGame::sendData(const QString &data)
 {
     if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState) {
         clientSocket->write((data + "\n").toUtf8());
-        clientSocket->flush();  // Немедленная отправка
-        qDebug() << "Отправлено:" << data;  // Для отладки
+        clientSocket->flush();
+        qDebug() << "Отправлено:" << data;
     }
 }
 
@@ -455,5 +434,60 @@ void DrawGame::mouseMoveEvent(QMouseEvent *event) {
                 .arg(drawingArea->getPenWidth());
             sendData(data);
         }
+    }
+}
+
+void DrawGame::onConnectClicked()
+{
+    QMessageBox::StandardButton reply = QMessageBox::question(this, "Выбор режима",
+                                                              "Запустить сервер?", QMessageBox::Yes|QMessageBox::No);
+    isServer = (reply == QMessageBox::Yes);
+
+    if (isServer) {
+        server = new QTcpServer(this);
+        if (!server->listen(QHostAddress::Any, 12345)) {
+            QMessageBox::critical(this, "Ошибка", "Не удалось запустить сервер!");
+            return;
+        }
+
+        QString ipAddress;
+        QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+        for (const QHostAddress &address : ipAddressesList) {
+            if (address != QHostAddress::LocalHost && address.toIPv4Address()) {
+                ipAddress = address.toString();
+                break;
+            }
+        }
+        if (ipAddress.isEmpty())
+            ipAddress = QHostAddress(QHostAddress::LocalHost).toString();
+
+        ui->statusLabel->setText(tr("Сервер запущен на %1:%2. Ожидание подключения...")
+                                     .arg(ipAddress).arg(server->serverPort()));
+
+        connect(server, &QTcpServer::newConnection, this, &DrawGame::newConnection);
+        isDrawer = true;
+        ui->startButton->setEnabled(true);
+    } else {
+        bool ok;
+        QString host = QInputDialog::getText(this, "Подключение к серверу",
+                                             "Введите IP сервера:", QLineEdit::Normal,
+                                             "", &ok);
+        if (!ok || host.isEmpty()) return;
+
+        clientSocket = new QTcpSocket(this);
+        connect(clientSocket, &QAbstractSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
+            QMessageBox::critical(this, "Ошибка", "Ошибка подключения: " + clientSocket->errorString());
+        });
+
+        clientSocket->connectToHost(host, 12345);
+
+        connect(clientSocket, &QTcpSocket::connected, this, [this]() {
+            ui->statusLabel->setText("Подключено к серверу");
+            isDrawer = false;
+            ui->startButton->setEnabled(true);
+        });
+
+        connect(clientSocket, &QTcpSocket::readyRead, this, &DrawGame::readData);
+        connect(clientSocket, &QTcpSocket::disconnected, this, &DrawGame::disconnected);
     }
 }

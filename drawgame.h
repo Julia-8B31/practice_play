@@ -68,6 +68,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
 
 private slots:
+    void onConnectClicked();
     void onStartGameClicked();
     void onSendMessageClicked();
     void onColorChanged(int index);
