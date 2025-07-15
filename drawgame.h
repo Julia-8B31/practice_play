@@ -85,7 +85,6 @@ private:
     void sendImageData();
     void assignRandomRole();
     void sendDrawingData(const QPoint& from, const QPoint& to);
-
     Ui::DrawGame *ui;
     DrawingArea *drawingArea;
     QTimer *gameTimer;

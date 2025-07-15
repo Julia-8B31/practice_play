@@ -186,7 +186,11 @@ DrawGame::DrawGame(QWidget *parent) :
 
         connect(clientSocket, &QTcpSocket::connected, this, [this]() {
             ui->statusLabel->setText("Подключено к серверу");
+            if (!isServer) {
+                sendData("REQUEST_IMAGE:");
+            }
         });
+
 
         connect(clientSocket, &QTcpSocket::readyRead, this, &DrawGame::readData);
         connect(clientSocket, &QTcpSocket::disconnected, this, &DrawGame::disconnected);
@@ -230,6 +234,16 @@ void DrawGame::setupConnections()
     connect(gameTimer, &QTimer::timeout, this, &DrawGame::updateGame);
 }
 
+void DrawGame::sendImageData()
+{
+    if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState && isDrawer) {
+        QByteArray byteArray;
+        QBuffer buffer(&byteArray);
+        buffer.open(QIODevice::WriteOnly);
+        drawingArea->getImage().save(&buffer, "PNG");
+        sendData("IMAGE:" + QString::fromLatin1(byteArray.toBase64()));
+    }
+}
 void DrawGame::onStartGameClicked()
 {
     assignRandomRole();
@@ -301,6 +315,7 @@ void DrawGame::onClearClicked()
     drawingArea->clear();
     if (clientSocket) {
         sendData("CLEAR:");
+        sendImageData();
     }
 }
 
@@ -364,8 +379,10 @@ void DrawGame::newConnection()
     connect(clientSocket, &QTcpSocket::disconnected, this, &DrawGame::disconnected);
 
     ui->statusLabel->setText("Клиент подключен");
-    // Роль будет назначена при старте игры
+    assignRandomRole();
     onStartGameClicked();
+
+    sendImageData();
 }
 
 void DrawGame::processDrawingCommand(const QString &data)
@@ -431,10 +448,20 @@ void DrawGame::readData()
                 currentWord = dataPart;
                 ui->chatTextEdit->append("Система: Соперник угадал слово \"" + currentWord + "\"");
                 QMessageBox::information(this, "Игра окончена", "Соперник угадал слово: " + currentWord);
-
                 isDrawer = false;
                 ui->startButton->setText("Начать игру (Вы отгадываете)");
                 onStartGameClicked();
+            }
+            else if (command == "IMAGE") {
+                QByteArray byteArray = QByteArray::fromBase64(dataPart.toLatin1());
+                QImage image;
+                image.loadFromData(byteArray, "PNG");
+                drawingArea->setImage(image);
+            }
+            else if (command == "REQUEST_IMAGE") {
+                if (isDrawer) {
+                    sendImageData();
+                }
             }
         }
     }
