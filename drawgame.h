@@ -35,7 +35,6 @@ public:
     void handleMouseMoveEvent(QMouseEvent *event);
     void publicDrawLineTo(const QPoint &endPoint);
 
-
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -44,7 +43,6 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    void drawLineTo(const QPoint &endPoint);
     void resizeImage(QImage *image, const QSize &newSize);
 
     bool drawing;
@@ -83,7 +81,7 @@ private:
     void generateRandomWord();
     void switchRoles();
     void sendData(const QString &data);
-    void processCommand(const QString &command, const QString &data);
+    void processDrawingCommand(const QString &data);
 
     Ui::DrawGame *ui;
     DrawingArea *drawingArea;

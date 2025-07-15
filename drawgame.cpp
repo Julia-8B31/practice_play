@@ -148,15 +148,50 @@ DrawGame::DrawGame(QWidget *parent) :
     isServer = (reply == QMessageBox::Yes);
 
     if (isServer) {
-        // Сервер всегда начинает как рисующий
-        isDrawer = true;
-        ui->startButton->setText("Начать игру (Вы рисуете)");
-    } else {
-        // Клиент всегда начинает как угадывающий
-        isDrawer = false;
-        ui->startButton->setText("Начать игру (Вы отгадываете)");
-    }
+        server = new QTcpServer(this);
+        if (!server->listen(QHostAddress::Any, 12345)) {
+            QMessageBox::critical(this, "Ошибка", "Не удалось запустить сервер!");
+            return;
+        }
 
+        QString ipAddress;
+        QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+        for (const QHostAddress &address : ipAddressesList) {
+            if (address != QHostAddress::LocalHost && address.toIPv4Address()) {
+                ipAddress = address.toString();
+                break;
+            }
+        }
+        if (ipAddress.isEmpty())
+            ipAddress = QHostAddress(QHostAddress::LocalHost).toString();
+
+        ui->statusLabel->setText(tr("Сервер запущен на %1:%2. Ожидание подключения...")
+                                     .arg(ipAddress).arg(server->serverPort()));
+
+        connect(server, &QTcpServer::newConnection, this, &DrawGame::newConnection);
+        isDrawer = true;
+    } else {
+        bool ok;
+        QString host = QInputDialog::getText(this, "Подключение к серверу",
+                                             "Введите IP сервера:", QLineEdit::Normal,
+                                             "127.0.0.1", &ok);
+        if (!ok || host.isEmpty()) return;
+
+        clientSocket = new QTcpSocket(this);
+        connect(clientSocket, &QAbstractSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
+            QMessageBox::critical(this, "Ошибка", "Ошибка подключения: " + clientSocket->errorString());
+        });
+
+        clientSocket->connectToHost(host, 12345);
+
+        connect(clientSocket, &QTcpSocket::connected, this, [this]() {
+            ui->statusLabel->setText("Подключено к серверу");
+            isDrawer = false;
+        });
+
+        connect(clientSocket, &QTcpSocket::readyRead, this, &DrawGame::readData);
+        connect(clientSocket, &QTcpSocket::disconnected, this, &DrawGame::disconnected);
+    }
 
     setupConnections();
     onStartGameClicked();
@@ -191,8 +226,8 @@ void DrawGame::onStartGameClicked()
     if (isDrawer) {
         ui->wordLabel->setText("Слово: " + currentWord);
         if (clientSocket) {
-            sendData("WORD:" + currentWord);  // Отправляем слово другому игроку
-            sendData("ROLE:GUESSER");        // Говорим другому игроку, что он угадывающий
+            sendData("WORD:" + currentWord);
+            sendData("ROLE:DRAWER");
         }
     } else {
         ui->wordLabel->setText("Слово: *****");
@@ -290,13 +325,8 @@ void DrawGame::generateRandomWord()
 
 void DrawGame::switchRoles()
 {
-    isDrawer = !isDrawer;  // Меняем роль текущего игрока
+    isDrawer = !isDrawer;
     ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
-
-    if (clientSocket) {
-        // Отправляем другому игроку его новую роль (противоположную нашей)
-        sendData(QString("ROLE:%1").arg(isDrawer ? "GUESSER" : "DRAWER"));
-    }
 }
 
 void DrawGame::newConnection()
@@ -315,6 +345,42 @@ void DrawGame::newConnection()
     onStartGameClicked();
 }
 
+void DrawGame::processDrawingCommand(const QString &data)
+{
+    QStringList parts = data.split(';');
+    if (parts.size() >= 3) {
+        QStringList start = parts[0].split(',');
+        QStringList end = parts[1].split(',');
+        QStringList params = parts[2].split(',');
+
+        if (start.size() == 2 && end.size() == 2 && params.size() >= 4) {
+            bool ok1, ok2, ok3, ok4;
+            QPoint startPoint(start[0].toInt(&ok1), start[1].toInt(&ok2));
+            QPoint endPoint(end[0].toInt(&ok3), end[1].toInt(&ok4));
+
+            if (!ok1 || !ok2 || !ok3 || !ok4) return;
+
+            QColor color(params[0].toInt(), params[1].toInt(), params[2].toInt());
+            bool eraser = params[3].toInt();
+            int width = params.size() > 4 ? params[4].toInt() : 3;
+
+            QColor oldColor = drawingArea->getPenColor();
+            bool oldEraser = drawingArea->isEraserMode();
+            int oldWidth = drawingArea->getPenWidth();
+
+            drawingArea->setPenColor(color);
+            drawingArea->setEraserMode(eraser);
+            drawingArea->setPenWidth(width);
+            drawingArea->setLastPoint(startPoint);
+            drawingArea->publicDrawLineTo(endPoint);
+
+            drawingArea->setPenColor(oldColor);
+            drawingArea->setEraserMode(oldEraser);
+            drawingArea->setPenWidth(oldWidth);
+        }
+    }
+}
+
 void DrawGame::readData()
 {
     while (clientSocket->bytesAvailable() > 0) {
@@ -329,53 +395,8 @@ void DrawGame::readData()
             QString command = message.left(separatorIndex);
             QString dataPart = message.mid(separatorIndex + 1);
 
-            if (command == "ROLE") {
-                // Обновляем роль в соответствии с полученным сообщением
-                isDrawer = (dataPart == "DRAWER");
-                ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
-
-                if (isDrawer) {
-                    ui->wordLabel->setText("Слово: " + currentWord);
-                } else {
-                    ui->wordLabel->setText("Слово: *****");
-                }
-            }
-
             if (command == "DRAW") {
-                if (!isDrawer) {  // Только если мы угадывающий, принимаем рисунок
-                    QStringList parts = dataPart.split(';');
-                    if (parts.size() >= 3) {
-                        QStringList start = parts[0].split(',');
-                        QStringList end = parts[1].split(',');
-                        QStringList params = parts[2].split(',');
-
-                        if (start.size() == 2 && end.size() == 2 && params.size() >= 4) {
-                            QPoint startPoint(start[0].toInt(), start[1].toInt());
-                            QPoint endPoint(end[0].toInt(), end[1].toInt());
-
-                            QColor color(params[0].toInt(), params[1].toInt(), params[2].toInt());
-                            bool eraser = params[3].toInt();
-                            int width = params.size() > 4 ? params[4].toInt() : 3;
-
-                            // Сохраняем текущие настройки кисти
-                            QColor oldColor = drawingArea->getPenColor();
-                            bool oldEraser = drawingArea->isEraserMode();
-                            int oldWidth = drawingArea->getPenWidth();
-
-                            // Устанавливаем параметры из сообщения
-                            drawingArea->setPenColor(color);
-                            drawingArea->setEraserMode(eraser);
-                            drawingArea->setPenWidth(width);
-                            drawingArea->setLastPoint(startPoint);
-                            drawingArea->publicDrawLineTo(endPoint);
-
-                            // Восстанавливаем старые настройки
-                            drawingArea->setPenColor(oldColor);
-                            drawingArea->setEraserMode(oldEraser);
-                            drawingArea->setPenWidth(oldWidth);
-                        }
-                    }
-                }
+                processDrawingCommand(dataPart);
             }
             else if (command == "CLEAR") {
                 drawingArea->clear();
@@ -420,8 +441,6 @@ void DrawGame::sendData(const QString &data)
 {
     if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState) {
         clientSocket->write((data + "\n").toUtf8());
-        clientSocket->flush();  // Немедленная отправка
-        qDebug() << "Отправлено:" << data;  // Для отладки
     }
 }
 
