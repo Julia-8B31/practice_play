@@ -34,6 +34,8 @@ void DrawingArea::handleMouseMoveEvent(QMouseEvent *event) {
 }
 
 void DrawingArea::publicDrawLineTo(const QPoint &endPoint) {
+    if (image.isNull()) return;
+
     QPainter painter(&image);
     QColor currentColor = eraserMode ? Qt::white : penColor;
     painter.setPen(QPen(currentColor, penWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
@@ -147,6 +149,7 @@ DrawGame::DrawGame(QWidget *parent) :
     ui->horizontalLayout->insertWidget(0, drawingArea);
     drawingArea->setMouseTracking(true);
     setMouseTracking(true);
+    drawingArea->setFocusPolicy(Qt::StrongFocus);
     gameTimer->setInterval(1000);
 
     QMessageBox::StandardButton reply = QMessageBox::question(this, "Выбор режима",
@@ -495,16 +498,22 @@ void DrawGame::sendData(const QString &data)
 
 void DrawGame::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton && isDrawer && drawingArea->rect().contains(event->pos())) {
-        drawingArea->handleMousePressEvent(event);
-        sendDrawingData(event->pos(), event->pos());
+    if (event->button() == Qt::LeftButton && isDrawer) {
+        QPoint pos = drawingArea->mapFromGlobal(event->globalPosition().toPoint());
+        if (drawingArea->rect().contains(pos)) {
+            drawingArea->handleMousePressEvent(event);
+            sendDrawingData(pos, pos);
+        }
     }
 }
 
 void DrawGame::mouseMoveEvent(QMouseEvent *event)
 {
-    if ((event->buttons() & Qt::LeftButton) && isDrawer && drawingArea->rect().contains(event->pos())) {
-        drawingArea->handleMouseMoveEvent(event);
-        sendDrawingData(drawingArea->getLastPoint(), event->pos());
+    if ((event->buttons() & Qt::LeftButton) && isDrawer) {
+        QPoint pos = drawingArea->mapFromGlobal(event->globalPosition().toPoint());
+        if (drawingArea->rect().contains(pos)) {
+            drawingArea->handleMouseMoveEvent(event);
+            sendDrawingData(drawingArea->getLastPoint(), pos);
+        }
     }
 }
