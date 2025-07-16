@@ -64,12 +64,16 @@ void DrawingArea::clear()
 
 void DrawingArea::mousePressEvent(QMouseEvent *event)
 {
-    handleMousePressEvent(event);
+    if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
+        handleMousePressEvent(event);
+    }
 }
 
 void DrawingArea::mouseMoveEvent(QMouseEvent *event)
 {
-    handleMouseMoveEvent(event);
+    if ((event->buttons() & Qt::LeftButton) && rect().contains(event->pos())) {
+        handleMouseMoveEvent(event);
+    }
 }
 
 void DrawingArea::mouseReleaseEvent(QMouseEvent *event)
@@ -117,6 +121,7 @@ void DrawingArea::setImage(const QImage& newImage)
 }
 
 DrawGame::DrawGame(QWidget *parent) :
+
     QMainWindow(parent),
     ui(new Ui::DrawGame),
     gameTimer(new QTimer(this)),
@@ -140,7 +145,8 @@ DrawGame::DrawGame(QWidget *parent) :
     drawingArea = new DrawingArea(this);
     drawingArea->setMinimumSize(600, 400);
     ui->horizontalLayout->insertWidget(0, drawingArea);
-
+    drawingArea->setMouseTracking(true);
+    setMouseTracking(true);
     gameTimer->setInterval(1000);
 
     QMessageBox::StandardButton reply = QMessageBox::question(this, "Выбор режима",
@@ -412,8 +418,6 @@ void DrawGame::processDrawingCommand(const QString &data)
             drawingArea->setPenWidth(width);
             drawingArea->setLastPoint(startPoint);
             drawingArea->publicDrawLineTo(endPoint);
-
-            update();
         }
     }
 }
@@ -491,22 +495,16 @@ void DrawGame::sendData(const QString &data)
 
 void DrawGame::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton && isDrawer) {
-        QPoint pos = drawingArea->mapFromParent(event->pos());
-        auto *newEvent = new QMouseEvent(QEvent::MouseButtonPress, pos, event->globalPosition(),
-                                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-        drawingArea->handleMousePressEvent(newEvent);
-        sendDrawingData(pos, pos);
+    if (event->button() == Qt::LeftButton && isDrawer && drawingArea->rect().contains(event->pos())) {
+        drawingArea->handleMousePressEvent(event);
+        sendDrawingData(event->pos(), event->pos());
     }
 }
 
 void DrawGame::mouseMoveEvent(QMouseEvent *event)
 {
-    if ((event->buttons() & Qt::LeftButton) && isDrawer) {
-        QPoint pos = drawingArea->mapFromParent(event->pos());
-        auto *newEvent = new QMouseEvent(QEvent::MouseMove, pos, event->globalPosition(),
-                                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-        drawingArea->handleMouseMoveEvent(newEvent);
-        sendDrawingData(drawingArea->getLastPoint(), pos);
+    if ((event->buttons() & Qt::LeftButton) && isDrawer && drawingArea->rect().contains(event->pos())) {
+        drawingArea->handleMouseMoveEvent(event);
+        sendDrawingData(drawingArea->getLastPoint(), event->pos());
     }
 }
