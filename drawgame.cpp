@@ -34,8 +34,6 @@ void DrawingArea::handleMouseMoveEvent(QMouseEvent *event) {
 }
 
 void DrawingArea::publicDrawLineTo(const QPoint &endPoint) {
-    if (image.isNull()) return;
-
     QPainter painter(&image);
     QColor currentColor = eraserMode ? Qt::white : penColor;
     painter.setPen(QPen(currentColor, penWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
@@ -46,8 +44,8 @@ void DrawingArea::publicDrawLineTo(const QPoint &endPoint) {
     update(rect);
 
     lastPoint = endPoint;
+    emit imageModified();
 }
-
 void DrawingArea::setPenColor(const QColor &newColor)
 {
     penColor = newColor;
@@ -120,6 +118,7 @@ void DrawingArea::setImage(const QImage& newImage)
 {
     image = newImage;
     update();
+    emit imageModified();
 }
 
 DrawGame::DrawGame(QWidget *parent) :
@@ -151,6 +150,7 @@ DrawGame::DrawGame(QWidget *parent) :
     setMouseTracking(true);
     drawingArea->setFocusPolicy(Qt::StrongFocus);
     gameTimer->setInterval(1000);
+    connect(drawingArea, &DrawingArea::imageModified, this, &DrawGame::sendFullState);
 
     QMessageBox::StandardButton reply = QMessageBox::question(this, "Выбор режима",
                                                               "Запустить сервер?", QMessageBox::Yes|QMessageBox::No);
@@ -216,6 +216,21 @@ DrawGame::DrawGame(QWidget *parent) :
 DrawGame::~DrawGame()
 {
     delete ui;
+}
+
+void DrawGame::sendFullState()
+{
+    if (!clientSocket || !isDrawer) return;
+
+    sendImageData();
+
+    QString params = QString("PARAMS:%1,%2,%3,%4,%5")
+                         .arg(drawingArea->getPenColor().red())
+                         .arg(drawingArea->getPenColor().green())
+                         .arg(drawingArea->getPenColor().blue())
+                         .arg(drawingArea->isEraserMode() ? 1 : 0)
+                         .arg(drawingArea->getPenWidth());
+    sendData(params);
 }
 
 void DrawGame::assignRandomRole()
@@ -395,7 +410,7 @@ void DrawGame::newConnection()
     assignRandomRole();
     onStartGameClicked();
 
-    sendImageData();
+    sendFullState();
 }
 
 void DrawGame::processDrawingCommand(const QString &data)
@@ -412,15 +427,18 @@ void DrawGame::processDrawingCommand(const QString &data)
             QPoint startPoint(start[0].toInt(), start[1].toInt());
             QPoint endPoint(end[0].toInt(), end[1].toInt());
 
-            QColor color(params[0].toInt(), params[1].toInt(), params[2].toInt());
-            bool eraser = params[3].toInt();
-            int width = params.size() > 4 ? params[4].toInt() : 3;
+            drawingArea->blockSignals(true);
 
-            drawingArea->setPenColor(color);
-            drawingArea->setEraserMode(eraser);
-            drawingArea->setPenWidth(width);
+            drawingArea->setPenColor(QColor(params[0].toInt(), params[1].toInt(), params[2].toInt()));
+            drawingArea->setEraserMode(params[3].toInt());
+            if (params.size() > 4) {
+                drawingArea->setPenWidth(params[4].toInt());
+            }
+
             drawingArea->setLastPoint(startPoint);
             drawingArea->publicDrawLineTo(endPoint);
+
+            drawingArea->blockSignals(false);
         }
     }
 }
@@ -476,6 +494,18 @@ void DrawGame::readData()
                     sendImageData();
                 }
             }
+            else if (command == "PARAMS") {
+                QStringList params = dataPart.split(',');
+                if (params.size() >= 4) {
+                    drawingArea->blockSignals(true);
+                    drawingArea->setPenColor(QColor(params[0].toInt(), params[1].toInt(), params[2].toInt()));
+                    drawingArea->setEraserMode(params[3].toInt());
+                    if (params.size() > 4) {
+                        drawingArea->setPenWidth(params[4].toInt());
+                    }
+                    drawingArea->blockSignals(false);
+                }
+            }
         }
     }
 }
@@ -499,7 +529,7 @@ void DrawGame::sendData(const QString &data)
 void DrawGame::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton && isDrawer) {
-        QPoint pos = drawingArea->mapFromGlobal(event->globalPosition().toPoint());
+        QPoint pos = drawingArea->mapFromParent(event->pos());
         if (drawingArea->rect().contains(pos)) {
             drawingArea->handleMousePressEvent(event);
             sendDrawingData(pos, pos);
@@ -510,7 +540,7 @@ void DrawGame::mousePressEvent(QMouseEvent *event)
 void DrawGame::mouseMoveEvent(QMouseEvent *event)
 {
     if ((event->buttons() & Qt::LeftButton) && isDrawer) {
-        QPoint pos = drawingArea->mapFromGlobal(event->globalPosition().toPoint());
+        QPoint pos = drawingArea->mapFromParent(event->pos());
         if (drawingArea->rect().contains(pos)) {
             drawingArea->handleMouseMoveEvent(event);
             sendDrawingData(drawingArea->getLastPoint(), pos);

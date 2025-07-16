@@ -35,6 +35,8 @@ public:
     void handleMouseMoveEvent(QMouseEvent *event);
     void publicDrawLineTo(const QPoint &endPoint);
 
+signals:
+    void imageModified();
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -95,6 +97,7 @@ private:
     QTcpServer *server;
     QTcpSocket *clientSocket;
     bool isServer;
+    void sendFullState();
 };
 
 #endif // DRAWGAME_H
