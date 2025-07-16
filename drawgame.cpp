@@ -243,7 +243,6 @@ void DrawGame::assignRandomRole()
     } else {
         isDrawer = false;
     }
-
     ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
 }
 
@@ -287,8 +286,6 @@ void DrawGame::sendImageData()
 
 void DrawGame::onStartGameClicked()
 {
-    assignRandomRole();
-
     generateRandomWord();
     gameTimer->start();
     secondsLeft = 180;
@@ -325,11 +322,10 @@ void DrawGame::onSendMessageClicked()
                 if (clientSocket) {
                     sendData("WIN:" + currentWord);
                     isDrawer = true;
-                    sendData("ROLE:GUESSER");
+                    sendData("ROLE:DRAWER");
+                    ui->startButton->setText("Начать игру (Вы рисуете)");
+                    onStartGameClicked();
                 }
-
-                ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
-                onStartGameClicked();
             }
         }
     }
@@ -479,8 +475,10 @@ void DrawGame::readData()
                 currentWord = dataPart;
                 ui->chatTextEdit->append("Система: Соперник угадал слово \"" + currentWord + "\"");
                 QMessageBox::information(this, "Игра окончена", "Соперник угадал слово: " + currentWord);
-                isDrawer = false;
-                ui->startButton->setText("Начать игру (Вы отгадываете)");
+
+                isDrawer = true;
+                ui->startButton->setText("Начать игру (Вы рисуете)");
+
                 onStartGameClicked();
             }
             else if (command == "IMAGE") {
