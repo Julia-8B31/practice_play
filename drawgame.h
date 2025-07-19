@@ -34,6 +34,7 @@ public:
     void handleMousePressEvent(QMouseEvent *event);
     void handleMouseMoveEvent(QMouseEvent *event);
     void publicDrawLineTo(const QPoint &endPoint);
+    void setDrawingEnabled(bool enabled);
 
 signals:
     void imageModified();
@@ -53,6 +54,7 @@ private:
     int penWidth;
     QImage image;
     QPoint lastPoint;
+    bool drawingEnabled;
 };
 
 class DrawGame : public QMainWindow
@@ -77,6 +79,7 @@ private slots:
     void newConnection();
     void readData();
     void disconnected();
+    void switchRoles(bool wordGuessed);
 
 private:
     void setupConnections();
@@ -98,6 +101,7 @@ private:
     QTcpSocket *clientSocket;
     bool isServer;
     void sendFullState();
+    void updateToolsAvailability();
 };
 
 #endif // DRAWGAME_H

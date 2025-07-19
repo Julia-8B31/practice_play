@@ -18,6 +18,14 @@ DrawingArea::DrawingArea(QWidget *parent) : QWidget(parent)
     penWidth = 3;
     image = QImage(800, 600, QImage::Format_RGB32);
     image.fill(Qt::white);
+    drawingEnabled = true;
+}
+
+void DrawingArea::setDrawingEnabled(bool enabled) {
+    drawingEnabled = enabled;
+
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    update();
 }
 
 void DrawingArea::handleMousePressEvent(QMouseEvent *event) {
@@ -64,6 +72,8 @@ void DrawingArea::clear()
 
 void DrawingArea::mousePressEvent(QMouseEvent *event)
 {
+    if (!drawingEnabled) return;
+
     if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
         handleMousePressEvent(event);
     }
@@ -71,6 +81,8 @@ void DrawingArea::mousePressEvent(QMouseEvent *event)
 
 void DrawingArea::mouseMoveEvent(QMouseEvent *event)
 {
+    if (!drawingEnabled) return;
+
     if ((event->buttons() & Qt::LeftButton) && rect().contains(event->pos())) {
         handleMouseMoveEvent(event);
     }
@@ -134,8 +146,27 @@ DrawGame::DrawGame(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    wordList << "Кошка" << "Собака" << "Дом" << "Солнце" << "Дерево"
-             << "Машина" << "Река" << "Гора" << "Книга" << "Цветок";
+    wordList << "Машина" << "Река" << "Гора" << "Книга" << "Цветок"
+             << "Солнце" << "Дерево" << "Окно" << "Часы" << "Телефон"
+             << "Яблоко" << "Кошка" << "Собака" << "Море" << "Снег"
+             << "Дождь" << "Гитара" << "Футбол" << "Компьютер" << "Ручка"
+             << "Самолет" << "Велосипед" << "Мороженое" << "Торт" << "Музыка"
+             << "Звезда" << "Луна" << "Огонь" << "Вода" << "Воздух"
+             << "Земля" << "Молния" << "Радуга" << "Вулкан" << "Остров"
+             << "Пустыня" << "Лес" << "Поле" << "Сад" << "Учитель"
+             << "Врач" << "Повар" << "Космонавт" << "Робот" << "Дракон"
+             << "Замок" << "Мост" << "Фонарь" << "Ключ" << "Зонт"
+             << "Чемодан" << "Карта" << "Глобус" << "Телевизор" << "Микрофон"
+             << "Фотоаппарат" << "Кино" << "Театр" << "Цирк" << "Музей"
+             << "Библиотека" << "Школа" << "Университет" << "Стадион" << "Ресторан"
+             << "Пирамида" << "Сфинкс" << "Эйфелева башня" << "Кремль" << "Водопад"
+             << "Айсберг" << "Пингвин" << "Кенгуру" << "Слон" << "Тигр"
+             << "Медведь" << "Волк" << "Лиса" << "Заяц" << "Ежик"
+             << "Бабочка" << "Пчела" << "Муравей" << "Рыба" << "Дельфин"
+             << "Кит" << "Акула" << "Черепаха" << "Змея" << "Ящерица"
+             << "Динозавр" << "Вампир" << "Привидение" << "Фея" << "Волшебник"
+             << "Супергерой" << "Космос" << "Ракета" << "Спутник" << "НЛО"
+             << "Парашют" << "Подводная лодка" << "Корабль" << "Поезд" << "Метро";
 
     QLayoutItem* item = ui->horizontalLayout->takeAt(0);
     if (item) {
@@ -151,6 +182,8 @@ DrawGame::DrawGame(QWidget *parent) :
     drawingArea->setFocusPolicy(Qt::StrongFocus);
     gameTimer->setInterval(1000);
     connect(drawingArea, &DrawingArea::imageModified, this, &DrawGame::sendFullState);
+    setupConnections();
+    updateToolsAvailability();
 
     QMessageBox::StandardButton reply = QMessageBox::question(this, "Выбор режима",
                                                               "Запустить сервер?", QMessageBox::Yes|QMessageBox::No);
@@ -206,6 +239,9 @@ DrawGame::DrawGame(QWidget *parent) :
     }
 
     setupConnections();
+    setupConnections();
+    updateToolsAvailability();
+    onStartGameClicked();
     onStartGameClicked();
     connect(ui->widthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             drawingArea, &DrawingArea::setPenWidth);
@@ -233,17 +269,29 @@ void DrawGame::sendFullState()
     sendData(params);
 }
 
+
 void DrawGame::assignRandomRole()
 {
-    if (isServer) {
-        isDrawer = true;
-        if (clientSocket) {
-            sendData("ROLE:GUESSER");
-        }
-    } else {
-        isDrawer = false;
+    isDrawer = isServer;
+    if (clientSocket) {
+        sendData(QString("ROLE:%1").arg(isServer ? "GUESSER" : "DRAWER"));
     }
     ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
+    updateToolsAvailability();
+}
+
+void DrawGame::switchRoles(bool wordGuessed)
+{
+    if (wordGuessed) {
+        isDrawer = !isDrawer;
+        if (clientSocket) {
+            sendData(QString("ROLE:%1").arg(isDrawer ? "GUESSER" : "DRAWER"));
+        }
+    }
+
+    ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
+    updateToolsAvailability();
+    onStartGameClicked();
 }
 
 void DrawGame::setupConnections()
@@ -284,8 +332,20 @@ void DrawGame::sendImageData()
     }
 }
 
+
+
 void DrawGame::onStartGameClicked()
 {
+    if (!isServer && !clientSocket) {
+        QMessageBox::warning(this, "Ошибка", "Не подключен к серверу!");
+        return;
+    }
+
+    if (isServer && !clientSocket) {
+        ui->statusLabel->setText("Ожидание подключения соперника...");
+        return;
+    }
+
     generateRandomWord();
     gameTimer->start();
     secondsLeft = 180;
@@ -313,20 +373,15 @@ void DrawGame::onSendMessageClicked()
             sendData("CHAT:" + message);
         }
 
-        if (!isDrawer) {
-            if (message.compare(currentWord, Qt::CaseInsensitive) == 0) {
-                gameTimer->stop();
-                ui->chatTextEdit->append("Система: Слово угадано! Это было \"" + currentWord + "\"");
-                QMessageBox::information(this, "Поздравляем!", "Вы угадали слово: " + currentWord);
+        if (!isDrawer && message.compare(currentWord, Qt::CaseInsensitive) == 0) {
+            gameTimer->stop();
+            ui->chatTextEdit->append("Система: Слово угадано! Это было \"" + currentWord + "\"");
+            QMessageBox::information(this, "Поздравляем!", "Вы угадали слово: " + currentWord);
 
-                if (clientSocket) {
-                    sendData("WIN:" + currentWord);
-                    isDrawer = true;
-                    sendData("ROLE:DRAWER");
-                    ui->startButton->setText("Начать игру (Вы рисуете)");
-                    onStartGameClicked();
-                }
+            if (clientSocket) {
+                sendData("WIN:" + currentWord);
             }
+            switchRoles(true);
         }
     }
 }
@@ -475,11 +530,7 @@ void DrawGame::readData()
                 currentWord = dataPart;
                 ui->chatTextEdit->append("Система: Соперник угадал слово \"" + currentWord + "\"");
                 QMessageBox::information(this, "Игра окончена", "Соперник угадал слово: " + currentWord);
-
-                isDrawer = true;
-                ui->startButton->setText("Начать игру (Вы рисуете)");
-
-                onStartGameClicked();
+                switchRoles(true);
             }
             else if (command == "IMAGE") {
                 QByteArray byteArray = QByteArray::fromBase64(dataPart.toLatin1());
@@ -543,5 +594,21 @@ void DrawGame::mouseMoveEvent(QMouseEvent *event)
             drawingArea->handleMouseMoveEvent(event);
             sendDrawingData(drawingArea->getLastPoint(), pos);
         }
+    }
+}
+
+void DrawGame::updateToolsAvailability()
+{
+    bool isDrawingEnabled = isDrawer;
+
+    ui->colorComboBox->setEnabled(isDrawingEnabled);
+    ui->widthSpinBox->setEnabled(isDrawingEnabled);
+    ui->clearButton->setEnabled(isDrawingEnabled);
+    ui->eraserButton->setEnabled(isDrawingEnabled);
+
+    drawingArea->setDrawingEnabled(isDrawingEnabled);
+
+    if (!isDrawingEnabled) {
+        ui->messageLineEdit->setFocus();
     }
 }
