@@ -238,10 +238,8 @@ DrawGame::DrawGame(QWidget *parent) :
         connect(clientSocket, &QTcpSocket::disconnected, this, &DrawGame::disconnected);
     }
 
-    setupConnections();
-    setupConnections();
+
     updateToolsAvailability();
-    onStartGameClicked();
     onStartGameClicked();
 
     connect(ui->messageLineEdit, &QLineEdit::returnPressed, this,
