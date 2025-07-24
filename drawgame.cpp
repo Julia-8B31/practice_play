@@ -243,10 +243,24 @@ DrawGame::DrawGame(QWidget *parent) :
     updateToolsAvailability();
     onStartGameClicked();
     onStartGameClicked();
-    connect(ui->widthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            drawingArea, &DrawingArea::setPenWidth);
+
     connect(ui->messageLineEdit, &QLineEdit::returnPressed, this,
             &DrawGame::onSendMessageClicked);
+
+    ui->brushSizeSlider->setTracking(true);
+    ui->eraserSizeSlider->setTracking(true);
+
+
+    brushSize = ui->brushSizeSlider->value();
+    eraserSize = ui->eraserSizeSlider->value();
+
+
+    connect(ui->brushSizeSlider, &QSlider::sliderMoved, this, &DrawGame::onBrushSizeChanged);
+    connect(ui->eraserSizeSlider, &QSlider::sliderMoved, this, &DrawGame::onEraserSizeChanged);
+
+    connect(ui->brushSizeSlider, &QSlider::valueChanged, this, &DrawGame::onBrushSizeChanged);
+    connect(ui->eraserSizeSlider, &QSlider::valueChanged, this, &DrawGame::onEraserSizeChanged);
+
 }
 
 DrawGame::~DrawGame()
@@ -276,7 +290,7 @@ void DrawGame::assignRandomRole()
     if (clientSocket) {
         sendData(QString("ROLE:%1").arg(isServer ? "GUESSER" : "DRAWER"));
     }
-    ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
+
     updateToolsAvailability();
 }
 
@@ -289,14 +303,13 @@ void DrawGame::switchRoles(bool wordGuessed)
         }
     }
 
-    ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
     updateToolsAvailability();
     onStartGameClicked();
 }
 
 void DrawGame::setupConnections()
 {
-    connect(ui->startButton, &QPushButton::clicked, this, &DrawGame::onStartGameClicked);
+
     connect(ui->sendButton, &QPushButton::clicked, this, &DrawGame::onSendMessageClicked);
     connect(ui->colorComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &DrawGame::onColorChanged);
@@ -416,8 +429,10 @@ void DrawGame::onEraserClicked(bool checked)
     drawingArea->setEraserMode(checked);
     if (checked) {
         drawingArea->setPenColor(Qt::white);
+        drawingArea->setPenWidth(eraserSize);
     } else {
         onColorChanged(ui->colorComboBox->currentIndex());
+        drawingArea->setPenWidth(brushSize);
     }
 }
 
@@ -520,7 +535,7 @@ void DrawGame::readData()
             }
             else if (command == "ROLE") {
                 isDrawer = (dataPart == "DRAWER");
-                ui->startButton->setText(isDrawer ? "Начать игру (Вы рисуете)" : "Начать игру (Вы отгадываете)");
+
             }
             else if (command == "CHAT") {
                 ui->chatTextEdit->append("Соперник: " + dataPart);
@@ -602,7 +617,6 @@ void DrawGame::updateToolsAvailability()
     bool isDrawingEnabled = isDrawer;
 
     ui->colorComboBox->setEnabled(isDrawingEnabled);
-    ui->widthSpinBox->setEnabled(isDrawingEnabled);
     ui->clearButton->setEnabled(isDrawingEnabled);
     ui->eraserButton->setEnabled(isDrawingEnabled);
 
@@ -611,4 +625,35 @@ void DrawGame::updateToolsAvailability()
     if (!isDrawingEnabled) {
         ui->messageLineEdit->setFocus();
     }
+}
+
+void DrawGame::onBrushSizeChanged(int value)
+{
+    brushSize = value;
+    ui->brushSizeLabel->setText(QString::number(value));
+
+    if (!drawingArea->isEraserMode()) {
+        drawingArea->setPenWidth(value);
+        drawingArea->update();
+    }
+}
+
+void DrawGame::onEraserSizeChanged(int value)
+{
+    eraserSize = value;
+    ui->eraserSizeLabel->setText(QString::number(value));
+
+    if (drawingArea->isEraserMode()) {
+        drawingArea->setPenWidth(value);
+        drawingArea->update();
+    }
+}
+void DrawGame::updateBrushSizeDisplay()
+{
+    ui->brushSizeLabel->setText(QString::number(brushSize));
+}
+
+void DrawGame::updateEraserSizeDisplay()
+{
+    ui->eraserSizeLabel->setText(QString::number(eraserSize));
 }

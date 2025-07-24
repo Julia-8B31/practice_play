@@ -80,6 +80,9 @@ private slots:
     void readData();
     void disconnected();
     void switchRoles(bool wordGuessed);
+    void onBrushSizeChanged(int value);
+    void onEraserSizeChanged(int value);
+
 
 private:
     void setupConnections();
@@ -97,11 +100,15 @@ private:
     QStringList wordList;
     bool isDrawer;
     int secondsLeft;
+    int brushSize;
+    int eraserSize;
     QTcpServer *server;
     QTcpSocket *clientSocket;
     bool isServer;
     void sendFullState();
     void updateToolsAvailability();
+    void updateBrushSizeDisplay();
+    void updateEraserSizeDisplay();
 };
 
 #endif // DRAWGAME_H
