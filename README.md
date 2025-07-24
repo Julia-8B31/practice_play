@@ -42,6 +42,7 @@ git clone https://github.com/yourusername/draw-and-guess-game.git
 https://www.radmin-vpn.com/
 
 2. Создайте или подключитесь к сети
+   
 Если вы хотите быть сервером (хостом):
 - Запустите Radmin VPN.
 - Нажмите "Создать сеть".
